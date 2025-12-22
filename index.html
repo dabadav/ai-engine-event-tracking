@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Event Tracking Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Jitsu (optional) -->
+  <!-- <script src="https://YOUR_JITSU_DOMAIN/p.js" defer></script> -->
+  <script async src="https://cmjcz00ai00002a7fxfjq6wqk.d.jitsu.com/p.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      padding: 24px;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+
+    .card p {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.85;
+    }
+
+    /* Zoom overlay */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .overlay.open {
+      display: flex;
+    }
+
+    .zoom-card {
+      background: #020617;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 600px;
+      width: 90%;
+      text-align: left;
+    }
+
+    .zoom-card h2 {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    .zoom-card p {
+      margin: 0;
+      line-height: 1.5;
+      opacity: 0.9;
+    }
+
+    .close {
+      margin-top: 24px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      background: #38bdf8;
+      color: #020617;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="grid">
+  <div
+    class="card"
+    data-item-id="card-1"
+    data-title="Memorial of Remembrance"
+    data-description="A historical memorial dedicated to preserving collective memory and honoring those who came before us."
+  >
+    <h2>Memorial of Remembrance</h2>
+    <p>A historical memorial dedicated to preserving collective memory…</p>
+  </div>
+
+  <div
+    class="card"
+    data-item-id="card-2"
+    data-title="Voices of the Past"
+    data-description="An archival collection of letters, diaries, and recorded testimonies from the early 20th century."
+  >
+    <h2>Voices of the Past</h2>
+    <p>An archival collection of letters, diaries, and recorded testimonies…</p>
+  </div>
+
+  <div
+    class="card"
+    data-item-id="card-3"
+    data-title="Paths Through History"
+    data-description="An interactive exploration of historical routes, migrations, and the stories that unfolded along them."
+  >
+    <h2>Paths Through History</h2>
+    <p>An interactive exploration of historical routes, migrations, and stories…</p>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="zoom-card">
+    <h2 id="zoomTitle"></h2>
+    <p id="zoomDescription"></p>
+    <button class="close" id="closeBtn">Close</button>
+  </div>
+</div>
+
+<script>
+/* ---------------------------------------------------
+   Minimal tracking setup
+--------------------------------------------------- */
+
+
+const ACTIVE_USER_ID = 1110;
+const ACTIVE_SESSION_ID = crypto.randomUUID();
+
+function trackEvent(itemId, eventType, payload = {}, { useBeacon = false } = {}) {
+  const eventData = {
+    user_id: ACTIVE_USER_ID,
+    session_id: ACTIVE_SESSION_ID,
+    item_id: itemId,
+    ...payload // Flattening payload directly into the properties
+  };
+  
+  // Jitsu (Object-based SDK)
+  try {
+    // Check if the object exists AND has the track method
+    if (window.jitsu && typeof window.jitsu.track === "function") {
+      
+      // Call the .track() method on the jitsu object
+      window.jitsu.track(eventType, eventData);
+
+      console.log(`[tracking] Success: ${eventType}`, eventData);
+    } else {
+      console.warn("[tracking] Jitsu object found, but .track() method is missing.");
+    }
+  } catch (err) {
+    // This prevents the "Item Details" card from breaking if Jitsu fails
+    console.error("[tracking] Jitsu Error:", err);
+  }
+}
+
+
+/* ---------------------------------------------------
+   UI logic
+--------------------------------------------------- */
+
+const overlay = document.getElementById("overlay");
+const zoomTitle = document.getElementById("zoomTitle");
+const zoomDescription = document.getElementById("zoomDescription");
+const closeBtn = document.getElementById("closeBtn");
+
+let activeItemId = null;
+
+document.querySelectorAll(".card").forEach(card => {
+  card.addEventListener("click", () => {
+    const itemId = card.dataset.itemId;
+    const title = card.dataset.title;
+    const description = card.dataset.description;
+
+    activeItemId = itemId;
+
+    zoomTitle.textContent = title;
+    zoomDescription.textContent = description;
+    overlay.classList.add("open");
+
+    trackEvent(itemId, "start", {
+      title,
+      description,
+      surface: "test_page"
+    });
+  });
+});
+
+closeBtn.addEventListener("click", () => {
+  if (activeItemId) {
+    trackEvent(activeItemId, "end", {}, { useBeacon: true });
+    activeItemId = null;
+  }
+  overlay.classList.remove("open");
+});
+
+window.addEventListener("beforeunload", () => {
+  if (activeItemId) {
+    trackEvent(activeItemId, "end", {}, { useBeacon: true });
+  }
+});
+</script>
+
+</body>
+</html>
