@@ -15,19 +15,6 @@ In this setup, **Jitsu is only an ingestion layer**:
 
 All analytics and AI logic happen **downstream**.
 
----
-
-## Architecture
-
-```text
-HTML UI
-  → Jitsu (p.js)
-    → ClickHouse (events)
-      → Materialized Views (dwell, projections)
-        → AI engine
-```
-
----
 
 ## 1. Include Jitsu
 
