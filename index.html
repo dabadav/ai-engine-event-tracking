@@ -2,12 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Event Tracking Test</title>
+  <title>Event Tracking Test - PostHog + Jitsu</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Jitsu (optional) -->
-  <!-- <script src="https://YOUR_JITSU_DOMAIN/p.js" defer></script> -->
+  <!-- Jitsu -->
   <script async src="https://cmjcz00ai00002a7fxfjq6wqk.d.jitsu.com/p.js"></script>
+
+  <!-- PostHog -->
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    
+    // Replace with YOUR PostHog Project API Key
+    posthog.init('phc_VVyl9gtSKb5T3etzMVGACoXLwSsJvbY8Pa1xR65TWux', {
+      api_host: 'https://eu.i.posthog.com',
+      // Disable features you don't need for testing
+      autocapture: false,
+      capture_pageview: false,
+      disable_session_recording: true
+    });
+  </script>
 
   <style>
     body {
@@ -15,6 +28,47 @@
       font-family: system-ui, sans-serif;
       background: #0f172a;
       color: #e5e7eb;
+    }
+
+    .header {
+      background: #1e293b;
+      padding: 20px 24px;
+      border-bottom: 2px solid #334155;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .header p {
+      margin: 0;
+      opacity: 0.7;
+      font-size: 14px;
+    }
+
+    .tracking-status {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge.active {
+      background: #10b981;
+      color: #020617;
+    }
+
+    .status-badge.inactive {
+      background: #ef4444;
+      color: white;
     }
 
     .grid {
@@ -85,6 +139,16 @@
       opacity: 0.9;
     }
 
+    .timer {
+      margin-top: 16px;
+      padding: 12px;
+      background: #1e293b;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 18px;
+      text-align: center;
+    }
+
     .close {
       margin-top: 24px;
       padding: 10px 18px;
@@ -95,9 +159,46 @@
       font-size: 16px;
       cursor: pointer;
     }
+
+    .console {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #020617;
+      border-top: 2px solid #334155;
+      padding: 12px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .console-line {
+      margin: 4px 0;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .console-line.posthog {
+      background: #1e40af;
+    }
+
+    .console-line.jitsu {
+      background: #7c3aed;
+    }
   </style>
 </head>
 <body>
+
+<div class="header">
+  <h1>Event Tracking Test</h1>
+  <p>Testing PostHog vs Jitsu - Click cards to track item views with dwell time</p>
+  <div class="tracking-status">
+    <span class="status-badge" id="posthog-status">PostHog: Loading...</span>
+    <span class="status-badge" id="jitsu-status">Jitsu: Loading...</span>
+  </div>
+</div>
 
 <div class="grid">
   <div
@@ -135,56 +236,112 @@
   <div class="zoom-card">
     <h2 id="zoomTitle"></h2>
     <p id="zoomDescription"></p>
+    <div class="timer">
+      Viewing for: <span id="timer">0</span>s
+    </div>
     <button class="close" id="closeBtn">Close</button>
   </div>
 </div>
 
+<div class="console" id="console">
+  <div style="font-weight: bold; margin-bottom: 8px;">Event Log:</div>
+</div>
+
 <script>
 /* ---------------------------------------------------
-   Minimal tracking setup
+   Tracking Status Check
 --------------------------------------------------- */
+const posthogStatus = document.getElementById('posthog-status');
+const jitsuStatus = document.getElementById('jitsu-status');
 
+// Check PostHog loaded
+setTimeout(() => {
+  if (window.posthog && typeof window.posthog.capture === 'function') {
+    posthogStatus.textContent = 'PostHog: ✓ Active';
+    posthogStatus.className = 'status-badge active';
+  } else {
+    posthogStatus.textContent = 'PostHog: ✗ Not configured';
+    posthogStatus.className = 'status-badge inactive';
+  }
+}, 1000);
 
+// Check Jitsu loaded
+setTimeout(() => {
+  if (window.jitsu && typeof window.jitsu.track === 'function') {
+    jitsuStatus.textContent = 'Jitsu: ✓ Active';
+    jitsuStatus.className = 'status-badge active';
+  } else {
+    jitsuStatus.textContent = 'Jitsu: ✗ Not loaded';
+    jitsuStatus.className = 'status-badge inactive';
+  }
+}, 1000);
+
+/* ---------------------------------------------------
+   Console Logger
+--------------------------------------------------- */
+function logToConsole(service, message) {
+  const consoleEl = document.getElementById('console');
+  const line = document.createElement('div');
+  line.className = `console-line ${service}`;
+  line.textContent = `[${service.toUpperCase()}] ${message}`;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+/* ---------------------------------------------------
+   Tracking Setup
+--------------------------------------------------- */
 const ACTIVE_USER_ID = 1110;
 const ACTIVE_SESSION_ID = crypto.randomUUID();
 
-function trackEvent(itemId, eventType, payload = {}, { useBeacon = false } = {}) {
+function trackEvent(itemId, eventType, payload = {}) {
   const eventData = {
     user_id: ACTIVE_USER_ID,
     session_id: ACTIVE_SESSION_ID,
     item_id: itemId,
-    ...payload // Flattening payload directly into the properties
+    ...payload
   };
   
-  // Jitsu (Object-based SDK)
+  // Track with PostHog
   try {
-    // Check if the object exists AND has the track method
-    if (window.jitsu && typeof window.jitsu.track === "function") {
+    if (window.posthog && typeof window.posthog.capture === 'function') {
+      // Identify user first (only need to do once, but safe to repeat)
+      posthog.identify(String(ACTIVE_USER_ID), {
+        session_id: ACTIVE_SESSION_ID
+      });
       
-      // Call the .track() method on the jitsu object
-      window.jitsu.track(eventType, eventData);
-
-      console.log(`[tracking] Success: ${eventType}`, eventData);
-    } else {
-      console.warn("[tracking] Jitsu object found, but .track() method is missing.");
+      posthog.capture(eventType, eventData);
+      logToConsole('posthog', `${eventType} → item: ${itemId}`);
     }
   } catch (err) {
-    // This prevents the "Item Details" card from breaking if Jitsu fails
-    console.error("[tracking] Jitsu Error:", err);
+    console.error('[PostHog Error]', err);
+    logToConsole('posthog', `ERROR: ${err.message}`);
+  }
+
+  // Track with Jitsu
+  try {
+    if (window.jitsu && typeof window.jitsu.track === 'function') {
+      window.jitsu.track(eventType, eventData);
+      logToConsole('jitsu', `${eventType} → item: ${itemId}`);
+    }
+  } catch (err) {
+    console.error('[Jitsu Error]', err);
+    logToConsole('jitsu', `ERROR: ${err.message}`);
   }
 }
 
-
 /* ---------------------------------------------------
-   UI logic
+   UI Logic with Dwell Time Tracking
 --------------------------------------------------- */
-
 const overlay = document.getElementById("overlay");
 const zoomTitle = document.getElementById("zoomTitle");
 const zoomDescription = document.getElementById("zoomDescription");
+const timerEl = document.getElementById("timer");
 const closeBtn = document.getElementById("closeBtn");
 
 let activeItemId = null;
+let startTime = null;
+let timerInterval = null;
 
 document.querySelectorAll(".card").forEach(card => {
   card.addEventListener("click", () => {
@@ -193,30 +350,78 @@ document.querySelectorAll(".card").forEach(card => {
     const description = card.dataset.description;
 
     activeItemId = itemId;
+    startTime = Date.now();
 
     zoomTitle.textContent = title;
     zoomDescription.textContent = description;
     overlay.classList.add("open");
 
-    trackEvent(itemId, "start", {
+    // Start timer display
+    timerInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      timerEl.textContent = elapsed;
+    }, 1000);
+
+    // Track start event
+    trackEvent(itemId, "item_view_start", {
       title,
       description,
-      surface: "test_page"
+      surface: "test_page",
+      timestamp_ms: startTime
     });
   });
 });
 
-closeBtn.addEventListener("click", () => {
-  if (activeItemId) {
-    trackEvent(activeItemId, "end", {}, { useBeacon: true });
+function closeOverlay() {
+  if (activeItemId && startTime) {
+    const endTime = Date.now();
+    const dwellTimeMs = endTime - startTime;
+    
+    // Track end event with dwell time
+    trackEvent(activeItemId, "item_view_end", {
+      timestamp_ms: endTime,
+      dwell_time_ms: dwellTimeMs,
+      dwell_time_seconds: Math.floor(dwellTimeMs / 1000)
+    });
+    
     activeItemId = null;
+    startTime = null;
   }
+  
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  
   overlay.classList.remove("open");
-});
+  timerEl.textContent = "0";
+}
 
+closeBtn.addEventListener("click", closeOverlay);
+
+// Track on page unload
 window.addEventListener("beforeunload", () => {
-  if (activeItemId) {
-    trackEvent(activeItemId, "end", {}, { useBeacon: true });
+  if (activeItemId && startTime) {
+    const dwellTimeMs = Date.now() - startTime;
+    
+    // Use sendBeacon for reliable tracking on page close
+    const eventData = {
+      user_id: ACTIVE_USER_ID,
+      session_id: ACTIVE_SESSION_ID,
+      item_id: activeItemId,
+      dwell_time_ms: dwellTimeMs,
+      dwell_time_seconds: Math.floor(dwellTimeMs / 1000)
+    };
+    
+    // PostHog beacon
+    if (window.posthog) {
+      posthog.capture("item_view_end", eventData);
+    }
+    
+    // Jitsu beacon (if supported)
+    if (window.jitsu) {
+      window.jitsu.track("item_view_end", eventData);
+    }
   }
 });
 </script>
