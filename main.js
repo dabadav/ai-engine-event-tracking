@@ -1,7 +1,17 @@
 import * as schemaV1 from "./schemas/schema_v1.js";
 import * as schemaV2 from "./schemas/schema_v2.js";
-import { emit } from "./emitter/emit.js";
-import { getSession } from "./state/session.js";
+
+/* ------------------ SESSION & USER ------------------ */
+
+const session = {
+  id: crypto.randomUUID(),
+  started_at: Date.now()
+};
+
+const user = {
+  anonymous_id: "anon-123",
+  user_id: null
+};
 
 /* ------------------ SCHEMA REGISTRY ------------------ */
 
@@ -10,90 +20,113 @@ const schemas = {
   v2: schemaV2
 };
 
-let activeSchemaKey = "v1";
+let activeSchema = schemas.v1;
 
-/* ------------------ DATA ------------------ */
-
-const cards = {
-  c1: { id: "c1", title: "Card 1", tags: ["memory"] },
-  c2: { id: "c2", title: "Card 2", tags: ["testimony"] },
-  c3: { id: "c3", title: "Card 3", tags: ["holocaust"] }
-};
-
-const user = {
-  anonymousId: "anon-123",
-  userId: null
-};
-
-/* ------------------ UI ELEMENTS ------------------ */
+/* ------------------ UI: SCHEMA SELECT ------------------ */
 
 const schemaSelect = document.getElementById("schema-select");
-const previewPanel = document.getElementById("event-preview");
-
-/* ------------------ INIT ------------------ */
 
 Object.entries(schemas).forEach(([key, schema]) => {
-  const option = document.createElement("option");
-  option.value = key;
-  option.textContent = schema.schemaName;
-  schemaSelect.appendChild(option);
+  const opt = document.createElement("option");
+  opt.value = key;
+  opt.textContent = schema.schemaName;
+  schemaSelect.appendChild(opt);
 });
 
-schemaSelect.value = activeSchemaKey;
+schemaSelect.value = "v1";
+
 schemaSelect.addEventListener("change", e => {
-  activeSchemaKey = e.target.value;
-  previewPanel.textContent = "// schema switched";
+  activeSchema = schemas[e.target.value];
+  logSystem(`Switched to ${activeSchema.schemaName}`);
 });
 
-/* ------------------ EVENT HANDLING ------------------ */
+/* ------------------ EMITTER ------------------ */
 
-function handleAction(action, cardId) {
-  const schema = schemas[activeSchemaKey];
-  const card = cards[cardId];
-  const session = getSession();
+const consoleEl = document.getElementById("console");
 
-  const event = schema.buildEvent({
-    action,
-    card,
-    session,
-    user
-  });
-
-  previewPanel.textContent = JSON.stringify(event, null, 2);
-  emit(event);
+function emit(event) {
+  logEvent(event);
 }
 
-/* ------------------ UI ------------------ */
+function logEvent(event) {
+  const line = document.createElement("div");
+  line.className = "console-line";
+  line.textContent =
+    `[${new Date().toISOString()}]\n${JSON.stringify(event, null, 2)}`;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
 
-const cardsView = document.getElementById("cards");
-const contentView = document.getElementById("content");
-const contentTitle = document.getElementById("content-title");
-const contentBody = document.getElementById("content-body");
-const closeBtn = document.getElementById("close-content");
+function logSystem(msg) {
+  const line = document.createElement("div");
+  line.className = "console-line";
+  line.style.background = "#334155";
+  line.textContent = `[SYSTEM] ${msg}`;
+  consoleEl.appendChild(line);
+}
 
-function openContent(card) {
-  contentTitle.textContent = card.title;
-  contentBody.textContent = `This is the content for ${card.title}.`;
-  cardsView.style.display = "none";
-  contentView.style.display = "block";
+/* ------------------ UI STATE ------------------ */
+
+const overlay = document.getElementById("overlay");
+const zoomTitle = document.getElementById("zoomTitle");
+const timerEl = document.getElementById("timer");
+const closeBtn = document.getElementById("closeBtn");
+
+let activeItemId = null;
+let startTime = null;
+let interval = null;
+
+/* ------------------ OPEN / CLOSE ------------------ */
+
+function openContent({ id, title }) {
+  activeItemId = id;
+  startTime = Date.now();
+
+  zoomTitle.textContent = title;
+  overlay.classList.add("open");
+
+  interval = setInterval(() => {
+    timerEl.textContent =
+      Math.floor((Date.now() - startTime) / 1000);
+  }, 1000);
+
+  emit(activeSchema.view_start({
+    item_id: id,
+    session,
+    user
+  }));
 }
 
 function closeContent() {
-  contentView.style.display = "none";
-  cardsView.style.display = "grid";
+  if (!activeItemId) return;
+
+  emit(activeSchema.view_end({
+    item_id: activeItemId,
+    dwell_ms: Date.now() - startTime,
+    session,
+    user
+  }));
+
+  clearInterval(interval);
+  overlay.classList.remove("open");
+  timerEl.textContent = "0";
+
+  activeItemId = null;
+  startTime = null;
 }
 
-closeBtn.addEventListener("click", closeContent);
+/* ------------------ BINDINGS ------------------ */
 
-/* ------------------ BIND UI ------------------ */
-
-document.querySelectorAll(".card").forEach(cardEl => {
-  const cardId = cardEl.dataset.cardId;
-
-  cardEl.querySelector(".view")
-    .addEventListener("click", () => {
-      handleAction("view", cardId);   // emit event
-      openContent(cards[cardId]);     // show content
+document.querySelectorAll(".card").forEach(card => {
+  card.addEventListener("click", () => {
+    openContent({
+      id: card.dataset.id,
+      title: card.dataset.title
     });
+  });
+});
 
+closeBtn.addEventListener("click", closeContent);
+overlay.addEventListener("click", e => {
+  if (e.target === overlay) closeContent();
 });
