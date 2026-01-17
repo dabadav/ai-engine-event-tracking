@@ -1,5 +1,6 @@
 import * as schemaV1 from "./schemas/schema_v1.js";
 import * as schemaV2 from "./schemas/schema_v2.js";
+import * as schemaSIMPLE from "./schemas/schema_simple.js";
 
 /* ------------------ SESSION & USER ------------------ */
 
@@ -9,7 +10,13 @@ const session = {
 };
 
 const user = {
-  anonymous_id: "anon-123",
+  anonymous_id:
+    localStorage.getItem("anon_id") ??
+    (() => {
+      const id = crypto.randomUUID();
+      localStorage.setItem("anon_id", id);
+      return id;
+    })(),
   user_id: null
 };
 
@@ -17,7 +24,8 @@ const user = {
 
 const schemas = {
   v1: schemaV1,
-  v2: schemaV2
+  v2: schemaV2,
+  v3: schemaSIMPLE
 };
 
 let activeSchema = schemas.v1;
@@ -45,7 +53,20 @@ schemaSelect.addEventListener("change", e => {
 const consoleEl = document.getElementById("console");
 
 function emit(event) {
+  // 1️⃣ Validate event has canonical shape
+  if (!event || !event.event || !event.properties) {
+    throw new Error("Invalid analytics event");
+  }
+
   logEvent(event);
+
+  // 2️⃣ Transport (later)
+  if (window.rudderanalytics) {
+    window.rudderanalytics.track(
+      event.event,
+      event.properties
+    );
+  }
 }
 
 function logEvent(event) {
