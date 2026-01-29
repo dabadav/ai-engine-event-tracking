@@ -186,8 +186,8 @@
       </div>
 
       <div class="section">
-        <button class="secondary" onclick="rudderanalytics.reset()">reset()</button>
-        <button class="secondary" onclick="showAnon()">getAnonymousId()</button>6
+        <button class="secondary" onclick="handleReset()">reset()</button>
+        <button class="secondary" onclick="showAnon()">getAnonymousId()</button>
         
       </div>
     </div>
@@ -245,6 +245,21 @@
 
     function showAnon() {
       log("log", "Anonymous ID", rudderanalytics.getAnonymousId());
+    }
+
+    function handleReset() {
+      // 1. Clear existing user data (userId and traits)
+      rudderanalytics.reset();
+
+      // 2. Manually generate a new unique ID
+      // Using crypto.randomUUID() is the modern way to get a valid UUID string
+      const newId = crypto.randomUUID();
+
+      // 3. Force the SDK to use it
+      rudderanalytics.setAnonymousId(newId);
+
+      // 4. Log it immediately
+      log("log", "Manual Reset Successful", "ID forced to: " + newId);
     }
 
     rudderanalytics.ready(() => log("log", "SDK ready"));
